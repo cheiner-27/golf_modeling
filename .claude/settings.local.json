@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python src/build_event_table.py)",
+      "Bash(python src/impute_rounds.py)",
+      "Bash(python src/build_features.py)"
+    ]
+  }
+}

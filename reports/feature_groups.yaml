@@ -1,0 +1,224 @@
+# Feature groups for data/processed/features.csv
+#
+# Used by the modeling pipeline to turn groups on/off for ablation studies.
+# Load this file, pick the groups you want, then keep only their columns
+# (plus the keys) for the training matrix.
+#
+# Naming scheme:  {group}_{stat}_{window}[_agg]
+#   group   3-letter prefix matching one of the keys below
+#   stat    base column name (sg_total, score_to_par, ...) — sometimes
+#           prefixed with plr_/rcn_ when this is a derived feature OF a
+#           player-level feature (e.g. fld_plr_sg_total_l24r_mean is the
+#           field's mean of the player-level plr_sg_total_l24r feature).
+#   window  l12r=last 12 rounds, l24r=last 24 rounds, l10e=last 10 events,
+#           l90d/l180d=last N days, career=all prior history.
+#   agg     mean / std / med / z / pct / corr / slope — only when ambiguous.
+#
+# Leakage rule: every aggregation uses only data with end_date strictly
+# before the row's event start_date.
+
+keys:
+  - event_id_year      # event identifier
+  - dg_id              # DataGolf player id
+
+groups:
+
+  tgt:
+    description: "Target variables. Required for training, not used as input."
+    prefix: tgt_
+    columns:
+      - tgt_top10                                 # 1 if score-rank within event <= 10 (ties via 'min')
+      - tgt_score_to_par                          # total_score - total_course_par (negative = under par)
+
+  ctx:
+    description: "Event context. Known pre-tournament; not subject to leakage."
+    prefix: ctx_
+    columns:
+      - ctx_field_size                            # count of distinct dg_ids with any round in the event
+
+  crs:
+    description: "Course history. Per-course aggregates over prior playings, rounds-weighted across the courses the player actually played in this event."
+    prefix: crs_
+    columns:
+      - crs_score_to_par_mean_career              # mean per-round score-to-par historically
+      - crs_score_to_par_madecut_mean_career      # same, restricted to event_table survivors
+      - crs_temp_mean_career                      # mean daily temperature historically
+      - crs_wind_mean_career                      # mean daily max-wind historically
+      - crs_precip_total_mean_career              # mean per-event precipitation total historically
+      - crs_sg_putt_corr_career                   # corr(sg_putt, round_score) at this course (>= 50 prior rounds)
+      - crs_sg_arg_corr_career
+      - crs_sg_app_corr_career
+      - crs_sg_ott_corr_career
+      - crs_sg_t2g_corr_career
+      - crs_sg_total_corr_career
+
+  plr:
+    description: "Player history. Expanding career mean and rolling l12r/l24r means over the player's prior real rounds (imputed rounds excluded)."
+    prefix: plr_
+    columns:
+      - plr_career_rounds                         # count of prior real rounds
+      # 13 stats x 3 windows = 39 columns (sg_putt/arg/app/ott/t2g/total,
+      # driving_dist/acc, gir, scrambling, prox_rgh/fw, score_to_par)
+      - plr_sg_putt_career
+      - plr_sg_putt_l12r
+      - plr_sg_putt_l24r
+      - plr_sg_arg_career
+      - plr_sg_arg_l12r
+      - plr_sg_arg_l24r
+      - plr_sg_app_career
+      - plr_sg_app_l12r
+      - plr_sg_app_l24r
+      - plr_sg_ott_career
+      - plr_sg_ott_l12r
+      - plr_sg_ott_l24r
+      - plr_sg_t2g_career
+      - plr_sg_t2g_l12r
+      - plr_sg_t2g_l24r
+      - plr_sg_total_career
+      - plr_sg_total_l12r
+      - plr_sg_total_l24r
+      - plr_driving_dist_career
+      - plr_driving_dist_l12r
+      - plr_driving_dist_l24r
+      - plr_driving_acc_career
+      - plr_driving_acc_l12r
+      - plr_driving_acc_l24r
+      - plr_gir_career
+      - plr_gir_l12r
+      - plr_gir_l24r
+      - plr_scrambling_career
+      - plr_scrambling_l12r
+      - plr_scrambling_l24r
+      - plr_prox_rgh_career
+      - plr_prox_rgh_l12r
+      - plr_prox_rgh_l24r
+      - plr_prox_fw_career
+      - plr_prox_fw_l12r
+      - plr_prox_fw_l24r
+      - plr_score_to_par_career
+      - plr_score_to_par_l12r
+      - plr_score_to_par_l24r
+
+  rcn:
+    description: "Recent form (event-level). Top-10 rate and SG slope over the player's last 10 events."
+    prefix: rcn_
+    columns:
+      - rcn_top10_pct_l10e                        # mean top10 over last 10 events
+      - rcn_sg_total_slope_l10e                   # OLS slope of event-mean sg_total over last 10 events
+
+  rst:
+    description: "Rust / cadence. How active the player has been around this event."
+    prefix: rst_
+    columns:
+      - rst_days_since                            # days from prior event end to this event start
+      - rst_events_l90d                           # events ending in the 90d before this event start
+      - rst_events_l180d                          # events ending in the 180d before this event start
+      - rst_days_since_med_career                 # career median of rst_days_since (player's typical gap)
+
+  exp:
+    description: "Expected performance baselines."
+    prefix: exp_
+    columns:
+      - exp_finish_sg_career                      # within-event rank by plr_sg_total_career (1 = best)
+
+  res:
+    description: "Residuals (actual − expected). Captures over/under-performance vs prior-skill expectation."
+    prefix: res_
+    columns:
+      - res_finish_vs_exp_med_career              # historical median of (actual_finish − exp_finish_sg_career)
+
+  fld:
+    description: "Field aggregates. Mean and std of plr_/rcn_ features across ALL starters in the event (incl. MC players). Constant within an event."
+    prefix: fld_
+    # 21 base cols × {mean, std} = 42; rcn × {mean, std} = 4 → 84 total. Listed by base.
+    base_columns:
+      - plr_career_rounds
+      - plr_sg_putt_career
+      - plr_sg_putt_l12r
+      - plr_sg_putt_l24r
+      - plr_sg_arg_career
+      - plr_sg_arg_l12r
+      - plr_sg_arg_l24r
+      - plr_sg_app_career
+      - plr_sg_app_l12r
+      - plr_sg_app_l24r
+      - plr_sg_ott_career
+      - plr_sg_ott_l12r
+      - plr_sg_ott_l24r
+      - plr_sg_t2g_career
+      - plr_sg_t2g_l12r
+      - plr_sg_t2g_l24r
+      - plr_sg_total_career
+      - plr_sg_total_l12r
+      - plr_sg_total_l24r
+      - plr_driving_dist_career
+      - plr_driving_dist_l12r
+      - plr_driving_dist_l24r
+      - plr_driving_acc_career
+      - plr_driving_acc_l12r
+      - plr_driving_acc_l24r
+      - plr_gir_career
+      - plr_gir_l12r
+      - plr_gir_l24r
+      - plr_scrambling_career
+      - plr_scrambling_l12r
+      - plr_scrambling_l24r
+      - plr_prox_rgh_career
+      - plr_prox_rgh_l12r
+      - plr_prox_rgh_l24r
+      - plr_prox_fw_career
+      - plr_prox_fw_l12r
+      - plr_prox_fw_l24r
+      - plr_score_to_par_career
+      - plr_score_to_par_l12r
+      - plr_score_to_par_l24r
+      - rcn_top10_pct_l10e
+      - rcn_sg_total_slope_l10e
+    # Each base column above appears as fld_{base}_mean and fld_{base}_std.
+
+  rel:
+    description: "Player vs field z-scores. (plr_or_rcn_value − fld_mean) / fld_std. Standardised within event."
+    prefix: rel_
+    base_columns: # column for each is rel_{base}_z
+      - plr_career_rounds
+      - plr_sg_putt_career
+      - plr_sg_putt_l12r
+      - plr_sg_putt_l24r
+      - plr_sg_arg_career
+      - plr_sg_arg_l12r
+      - plr_sg_arg_l24r
+      - plr_sg_app_career
+      - plr_sg_app_l12r
+      - plr_sg_app_l24r
+      - plr_sg_ott_career
+      - plr_sg_ott_l12r
+      - plr_sg_ott_l24r
+      - plr_sg_t2g_career
+      - plr_sg_t2g_l12r
+      - plr_sg_t2g_l24r
+      - plr_sg_total_career
+      - plr_sg_total_l12r
+      - plr_sg_total_l24r
+      - plr_driving_dist_career
+      - plr_driving_dist_l12r
+      - plr_driving_dist_l24r
+      - plr_driving_acc_career
+      - plr_driving_acc_l12r
+      - plr_driving_acc_l24r
+      - plr_gir_career
+      - plr_gir_l12r
+      - plr_gir_l24r
+      - plr_scrambling_career
+      - plr_scrambling_l12r
+      - plr_scrambling_l24r
+      - plr_prox_rgh_career
+      - plr_prox_rgh_l12r
+      - plr_prox_rgh_l24r
+      - plr_prox_fw_career
+      - plr_prox_fw_l12r
+      - plr_prox_fw_l24r
+      - plr_score_to_par_career
+      - plr_score_to_par_l12r
+      - plr_score_to_par_l24r
+      - rcn_top10_pct_l10e
+      - rcn_sg_total_slope_l10e
